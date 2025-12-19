@@ -86,7 +86,8 @@ SQA_Config = {
     enabled = true,      -- Activer/désactiver l'addon
     language = "AUTO",   -- Langue choisie
     lastObjectives = {}  -- Cache des objectifs de quête
-}```
+}
+```
 
 ## 🔧 Optimisations Techniques
 Throttling intelligent : Scans adaptés selon l'état de combat
