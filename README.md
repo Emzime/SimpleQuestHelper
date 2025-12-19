@@ -97,13 +97,7 @@ Compatibilité pfUI : Intégration avec l'UI populaire pfUI
 
 ## 🐛 Dépannage
 Problèmes courants :
-Le bouton n'apparaît pas
-Tapez /sqa button pour le recréer
-
+Le bouton n'apparaît pas : Tapez /sqa button pour le recréer
 Vérifiez que l'addon est activé
-
-Pas d'annonces
-Vérifiez que l'addon est activé (/sqa on)
-
-Erreurs Lua
-Tapez /console scriptErrors 1 pour voir les erreurs
+Pas d'annonces : Vérifiez que l'addon est activé (/sqa on)
+Erreurs Lua : Tapez /console scriptErrors 1 pour voir les erreurs
