@@ -33,6 +33,10 @@ SQH.isScanning = false
 -- Table pour les quêtes déjà annoncées comme terminées DANS CETTE SESSION
 SQH.announcedComplete = {}
 
+-- Variables pour gérer les complétions de quêtes
+SQH.lastCompletedQuest = nil
+SQH.lastCompletionTime = 0
+
 -- Temps de chargement pour éviter les annonces au démarrage
 local loadTime = 0
 local startupSilence = 15  -- Secondes de silence après /reload
@@ -50,13 +54,13 @@ local pendingScan = false
 SQH.L = {
     PREFIX = "|cFF00CCFF[SQH]|r",
     COMPLETED = "Quest Complete!",
-    ENABLED = "Enabled",
-    DISABLED = "Disabled",
+    ENABLED = "Announcements enabled",
+    DISABLED = "Announcements disabled",
     AUTO_ACCEPT_ON = "Auto-accept enabled",
     AUTO_ACCEPT_OFF = "Auto-accept disabled",
     AUTO_COMPLETE_ON = "Auto-complete enabled",
     AUTO_COMPLETE_OFF = "Auto-complete disabled",
-    HELP = "Usage: /sqh on|off",
+    HELP = "Usage: /sqh announce|autoaccept|autocomplete|lang|...",
     TOOLTIP_TITLE = "Simple Quest Helper",
     TOOLTIP_LEFT_CLICK = "Left click: Toggle announcements",
     TOOLTIP_LEFT_SHIFT = "Shift+Left click: Change language",
@@ -82,20 +86,30 @@ SQH.L = {
     LANG_LIST = "Available languages:",
     LANG_USAGE = "Usage: /sqh lang [number]",
     CMD_HELP = "|cFF00CCFF=== Simple Quest Helper Commands ===|r",
-    CMD_ON = "|cFF00FF00/sqh on|r - Enable announcements",
-    CMD_OFF = "|cFFFF0000/sqh off|r - Disable announcements",
+    CMD_ANNOUNCE_ON = "|cFF00FF00/sqh announce on|r - Enable announcements",
+    CMD_ANNOUNCE_OFF = "|cFFFF0000/sqh announce off|r - Disable announcements",
+    CMD_AUTO_ACCEPT_ON = "|cFF00FF00/sqh autoaccept on|r - Enable auto-accept",
+    CMD_AUTO_ACCEPT_OFF = "|cFFFF0000/sqh autoaccept off|r - Disable auto-accept",
+    CMD_AUTO_COMPLETE_ON = "|cFF00FF00/sqh autocomplete on|r - Enable auto-complete",
+    CMD_AUTO_COMPLETE_OFF = "|cFFFF0000/sqh autocomplete off|r - Disable auto-complete",
     CMD_LANG = "|cFFFFFF00/sqh lang|r - Change language",
     CMD_BUTTON = "|cFF00FFFF/sqh button|r - Recreate button",
     CMD_SCAN = "|cFFFF9900/sqh scan|r - Scan quests",
-    CMD_AUTO_ACCEPT = "|cFF00FF00/sqh autoaccept|r - Toggle auto-accept",
-    CMD_AUTO_COMPLETE = "|cFF00FF00/sqh autocomplete|r - Toggle auto-complete",
+    CMD_CLEAR = "|cFFFF9900/sqh clear|r - Clear cache",
     CMD_HELP_TEXT = "|cFFCC00CC/sqh help|r - Show this help",
     UNKNOWN_CMD = "Unknown command. Type |cFF00CCFF/sqh help|r",
     LOADED = "|cFF00CCFFSimple Quest Helper v1.2|r loaded",
     TYPE_HELP = "Type |cFF00CCFF/sqh help|r for commands",
     BUTTON_CREATED = "Button created",
     CACHE_CLEARED = "Quest cache cleared",
-    CACHE_CLEANED = "Cache cleaned"
+    CACHE_CLEANED = "Cache cleaned",
+    QUEST_ACCEPTED = "Quest auto-accepted",
+    BAGS_FULL = "Bags are full, cannot complete quest!",
+    AUTO_COMPLETING = "Auto-completing quest...",
+    CHOOSE_REWARD = "Please choose your reward",
+    ANNOUNCEMENTS = "Announcements",
+    AUTO_ACCEPT = "Auto-accept",
+    AUTO_COMPLETE = "Auto-complete"
 }
 
 -- Table des locales disponibles
@@ -420,26 +434,33 @@ end
 
 -------------------------------------------------
 -- FONCTIONS D'ACCEPTATION AUTOMATIQUE DES QUÊTES
+-- SEULEMENT QUAND LA FENÊTRE DE QUÊTE S'OUVRE
 -------------------------------------------------
 
 local function SQHAutoAcceptQuests()
     if not SQH.autoAccept then return false end
 
+    -- ============================================
     -- Méthode 1: Système GOSSIP (WoW 1.12)
+    -- ============================================
     local gossipData = {GetGossipAvailableQuests()}
     if gossipData and gossipData[1] then
         SelectGossipAvailableQuest(1)
         return true
     end
 
+    -- ============================================
     -- Méthode 2: Ancien système QUEST_GREETING
+    -- ============================================
     local numAvailable = GetNumAvailableQuests()
     if numAvailable and numAvailable > 0 then
         SelectAvailableQuest(1)
         return true
     end
 
+    -- ============================================
     -- Méthode 3: Quêtes actives terminées via gossip
+    -- ============================================
     local activeData = {GetGossipActiveQuests()}
     if activeData and activeData[1] then
         local numQuests = table.getn(activeData) / 6
@@ -452,7 +473,9 @@ local function SQHAutoAcceptQuests()
         end
     end
 
+    -- ============================================
     -- Méthode 4: Quêtes actives terminées (ancien système)
+    -- ============================================
     local numActive = GetNumActiveQuests()
     if numActive and numActive > 0 then
         for i = 1, numActive do
@@ -481,6 +504,7 @@ end
 
 function SQH:HandleQuestDetail()
     if SQH.autoAccept then
+        DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.QUEST_ACCEPTED)
         AcceptQuest()
     end
 end
@@ -491,14 +515,119 @@ function SQH:HandleQuestProgress()
     end
 end
 
+-------------------------------------------------
+-- Gestionnaire d'événement pour QUEST_COMPLETE amélioré
+-- AVEC VÉRIFICATION DES SACS PLEINS ET COOLDOWN
+-------------------------------------------------
+
 function SQH:HandleQuestComplete()
-    if SQH.autoComplete then
-        local numChoices = GetNumQuestChoices()
-        if numChoices == 0 then
-            GetQuestReward()
-        -- Note: Si numChoices > 0, on laisse le joueur choisir manuellement
+    if not SQH.autoComplete then
+        return
+    end
+
+    local currentTime = GetTime()
+    local COMPLETION_COOLDOWN = 2  -- Secondes entre deux complétions
+
+    -- Vérifier le cooldown pour éviter les spams
+    if currentTime - self.lastCompletionTime < COMPLETION_COOLDOWN then
+        return
+    end
+
+    -- Vérifier si on peut compléter la quête
+    if not IsQuestCompletable() then
+        return
+    end
+
+    -- Vérifier si les sacs sont pleins
+    local bagsFull = true
+    for bag = 0, 4 do
+        local numSlots = GetContainerNumSlots(bag)
+        if numSlots and numSlots > 0 then
+            for slot = 1, numSlots do
+                local texture = GetContainerItemInfo(bag, slot)
+                if not texture then
+                    bagsFull = false
+                    break
+                end
+            end
+        end
+        if not bagsFull then break end
+    end
+
+    if bagsFull then
+        DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000SQH:|r " .. SQH.L.BAGS_FULL)
+        return
+    end
+
+    local numChoices = GetNumQuestChoices()
+
+    -- S'il n'y a pas de choix de récompense, compléter automatiquement
+    if numChoices == 0 then
+        self.lastCompletionTime = currentTime
+        DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.AUTO_COMPLETING)
+        GetQuestReward()
+    else
+        -- S'il y a des choix, laisser le joueur choisir
+        DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.CHOOSE_REWARD)
+    end
+end
+
+-------------------------------------------------
+-- Fonction de débogage pour les objets
+-------------------------------------------------
+
+function SQH:DebugQuestItems()
+    DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000DEBUG:|r Checking quest items...")
+    DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000DEBUG:|r AutoAccept is: " .. tostring(SQH.autoAccept))
+
+    local foundQuestItems = 0
+
+    for bag = 0, 4 do
+        local numSlots = GetContainerNumSlots(bag)
+        if numSlots and numSlots > 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000DEBUG:|r Bag " .. bag .. " has " .. numSlots .. " slots")
+            for slot = 1, numSlots do
+                local texture, itemCount, locked, quality, readable = GetContainerItemInfo(bag, slot)
+
+                if texture then
+                    local itemName = "Unknown"
+                    local itemLink = GetContainerItemLink(bag, slot)
+
+                    if itemLink then
+                        -- Essayer d'extraire le nom depuis le lien
+                        local _, _, name = string.find(itemLink, "%[(.-)%]")
+                        if name then
+                            itemName = name
+                        end
+
+                        DEFAULT_CHAT_FRAME:AddMessage(string.format(
+                            "|cFFFF0000DEBUG:|r Slot %d: %s (readable: %s, quality: %d)",
+                            slot, itemName, tostring(readable), quality or -1
+                        ))
+
+                        if readable then
+                            foundQuestItems = foundQuestItems + 1
+                            DEFAULT_CHAT_FRAME:AddMessage("|cFF00FF00DEBUG:|r ^ This is a readable quest item!")
+                        end
+                    else
+                        DEFAULT_CHAT_FRAME:AddMessage(string.format(
+                            "|cFFFF0000DEBUG:|r Slot %d: texture=%s (no link)",
+                            slot, texture
+                        ))
+                    end
+                else
+                    DEFAULT_CHAT_FRAME:AddMessage(string.format(
+                        "|cFFFF0000DEBUG:|r Slot %d: Empty",
+                        slot
+                    ))
+                end
+            end
+        else
+            DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000DEBUG:|r Bag " .. bag .. " has 0 slots or doesn't exist")
         end
     end
+
+    DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000DEBUG:|r Total readable quest items found: " .. foundQuestItems)
 end
 
 -------------------------------------------------
@@ -591,7 +720,7 @@ function SQH:CreateButton()
     button.goldCircle:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
     button.goldCircle:SetWidth(32)
     button.goldCircle:SetHeight(32)
-    button.goldCircle:SetPoint("CENTER", 0, -3)
+    button.goldCircle:SetPoint("CENTER", 0, 0)
     button.goldCircle:SetTexCoord(0, 0.6, 0, 0.6)
 
     -- Icône personnalisée
@@ -599,7 +728,7 @@ function SQH:CreateButton()
     button.icon:SetTexture("Interface\\AddOns\\SimpleQuestHelper\\icon")
     button.icon:SetWidth(20)
     button.icon:SetHeight(20)
-    button.icon:SetPoint("CENTER", 0, -4)
+    button.icon:SetPoint("CENTER", 0, 0)
     button.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
 
     -- Highlight au survol
@@ -607,7 +736,7 @@ function SQH:CreateButton()
     button.highlight:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
     button.highlight:SetWidth(32)
     button.highlight:SetHeight(32)
-    button.highlight:SetPoint("CENTER", 0, -3)
+    button.highlight:SetPoint("CENTER", 0, 0)
     button.highlight:SetTexCoord(0, 0.6, 0, 0.6)
     button.highlight:SetBlendMode("ADD")
 
@@ -739,6 +868,7 @@ function SQH:CreateButton()
                 SQH.lastObjectives = {}
                 SQH_Config.lastObjectives = {}
                 SQH.announcedComplete = {}
+                SQH.lastCompletionTime = 0
                 DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.CACHE_CLEARED)
             else
                 -- Clic droit simple: Activer/Désactiver auto-accept
@@ -792,27 +922,69 @@ end
 SLASH_SIMPLEQUESTHELPER1 = "/sqh"
 SlashCmdList["SIMPLEQUESTHELPER"] = function(msg)
     msg = string.lower(msg or "")
+    local cmd = msg
+    local subcmd = ""
 
-    if msg == "on" then
-        SQH.enabled = true
-        SQH_Config.enabled = true
-        DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.ENABLED)
+    -- Séparer la commande et le sous-commande
+    local spacePos = string.find(msg, " ")
+    if spacePos then
+        cmd = string.sub(msg, 1, spacePos - 1)
+        subcmd = string.sub(msg, spacePos + 1)
+    end
 
-        if SQHMinimapButton then
-            SQHMinimapButton.icon:SetVertexColor(1, 1, 1)
+    -- Annonces (remplace on/off)
+    if cmd == "announce" then
+        if subcmd == "on" or subcmd == "" then
+            SQH.enabled = true
+            SQH_Config.enabled = true
+            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.ENABLED)
+
+            if SQHMinimapButton then
+                SQHMinimapButton.icon:SetVertexColor(1, 1, 1)
+            end
+        elseif subcmd == "off" then
+            SQH.enabled = false
+            SQH_Config.enabled = false
+            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.DISABLED)
+
+            if SQHMinimapButton then
+                SQHMinimapButton.icon:SetVertexColor(0.5, 0.5, 0.5)
+            end
+        else
+            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r Usage: /sqh announce on|off")
         end
 
-    elseif msg == "off" then
-        SQH.enabled = false
-        SQH_Config.enabled = false
-        DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.DISABLED)
-
-        if SQHMinimapButton then
-            SQHMinimapButton.icon:SetVertexColor(0.5, 0.5, 0.5)
+    -- Auto-accept
+    elseif cmd == "autoaccept" then
+        if subcmd == "on" or subcmd == "" then
+            SQH.autoAccept = true
+            SQH_Config.autoAccept = true
+            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.AUTO_ACCEPT_ON)
+        elseif subcmd == "off" then
+            SQH.autoAccept = false
+            SQH_Config.autoAccept = false
+            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.AUTO_ACCEPT_OFF)
+        else
+            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r Usage: /sqh autoaccept on|off")
         end
 
-    elseif string.sub(msg, 1, 4) == "lang" then
-        local num = tonumber(string.sub(msg, 6))
+    -- Auto-complete
+    elseif cmd == "autocomplete" then
+        if subcmd == "on" or subcmd == "" then
+            SQH.autoComplete = true
+            SQH_Config.autoComplete = true
+            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.AUTO_COMPLETE_ON)
+        elseif subcmd == "off" then
+            SQH.autoComplete = false
+            SQH_Config.autoComplete = false
+            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.AUTO_COMPLETE_OFF)
+        else
+            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r Usage: /sqh autocomplete on|off")
+        end
+
+    -- Langue
+    elseif cmd == "lang" then
+        local num = tonumber(subcmd)
         local langs = {
             {1, "|cFF00CCFFAuto (Client)|r", "AUTO"},
             {2, "|cFFFF9900English|r", "enUS"},
@@ -835,7 +1007,7 @@ SlashCmdList["SIMPLEQUESTHELPER"] = function(msg)
             DEFAULT_CHAT_FRAME:AddMessage("|cFFFFFF00" .. SQH.L.LANG_USAGE .. "|r")
         end
 
-    elseif msg == "button" then
+    elseif cmd == "button" then
         if not SQHMinimapButton then
             SQH:CreateButton()
             DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.BUTTON_CREATED)
@@ -843,7 +1015,7 @@ SlashCmdList["SIMPLEQUESTHELPER"] = function(msg)
             DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.BUTTON_EXISTS)
         end
 
-    elseif msg == "scan" then
+    elseif cmd == "scan" then
         DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.SCAN_START)
         if SQH.initialized then
             ScanQuestLog()
@@ -852,49 +1024,40 @@ SlashCmdList["SIMPLEQUESTHELPER"] = function(msg)
             DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000SQH:|r Not initialized yet")
         end
 
-    elseif msg == "clear" then
+    elseif cmd == "clear" then
         SQH.lastObjectives = {}
         SQH_Config.lastObjectives = {}
         SQH.announcedComplete = {}
+        SQH.lastCompletionTime = 0
         DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.CACHE_CLEARED)
 
-    elseif msg == "autoaccept" then
-        SQH.autoAccept = not SQH.autoAccept
-        SQH_Config.autoAccept = SQH.autoAccept
-        if SQH.autoAccept then
-            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.AUTO_ACCEPT_ON)
-        else
-            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.AUTO_ACCEPT_OFF)
-        end
+    elseif cmd == "debug" then
+        SQH:DebugQuestItems()
 
-    elseif msg == "autocomplete" then
-        SQH.autoComplete = not SQH.autoComplete
-        SQH_Config.autoComplete = SQH.autoComplete
-        if SQH.autoComplete then
-            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.AUTO_COMPLETE_ON)
-        else
-            DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.AUTO_COMPLETE_OFF)
-        end
-
-    elseif msg == "help" or msg == "" or msg == "?" then
+    elseif cmd == "help" or cmd == "" or cmd == "?" then
         DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_HELP)
-        DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_ON)
-        DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_OFF)
+        DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_ANNOUNCE_ON)
+        DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_ANNOUNCE_OFF)
+        DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_AUTO_ACCEPT_ON)
+        DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_AUTO_ACCEPT_OFF)
+        DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_AUTO_COMPLETE_ON)
+        DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_AUTO_COMPLETE_OFF)
         DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_LANG)
         DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_BUTTON)
         DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_SCAN)
-        DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_AUTO_ACCEPT)
-        DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_AUTO_COMPLETE)
+        DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_CLEAR)
         DEFAULT_CHAT_FRAME:AddMessage(SQH.L.CMD_HELP_TEXT)
+        DEFAULT_CHAT_FRAME:AddMessage("|cFFFF0000/sqh debug|r - Debug quest items")
 
     else
         DEFAULT_CHAT_FRAME:AddMessage("|cFF00CCFFSQH:|r " .. SQH.L.UNKNOWN_CMD)
+        DEFAULT_CHAT_FRAME:AddMessage("|cFFFFFF00Type |cFF00CCFF/sqh help|r |cFFFFFF00for available commands|r")
     end
 end
 
 -------------------------------------------------
 -- Événements principaux
--- AVEC CORRECTION POUR LA LANGUE AU CHARGEMENT
+-- SEULEMENT LES ÉVÉNEMENTS ESSENTIELS
 -------------------------------------------------
 
 local mainFrame = CreateFrame("Frame")
@@ -908,7 +1071,7 @@ mainFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 -- Événements pour l'acceptation automatique
 mainFrame:RegisterEvent("QUEST_PROGRESS")
 mainFrame:RegisterEvent("QUEST_COMPLETE")
-mainFrame:RegisterEvent("QUEST_DETAIL")
+mainFrame:RegisterEvent("QUEST_DETAIL")      -- QUAND ON CLIQUE SUR UN OBJET DE QUÊTE
 mainFrame:RegisterEvent("GOSSIP_SHOW")
 mainFrame:RegisterEvent("QUEST_GREETING")
 
@@ -931,6 +1094,7 @@ mainFrame:SetScript("OnEvent", function()
 
         -- Initialiser le cache de session
         SQH.announcedComplete = {}
+        SQH.lastCompletionTime = 0
 
         -- Attendre que les locales soient chargées
         local waitForLocales = CreateFrame("Frame")
@@ -1007,19 +1171,21 @@ mainFrame:SetScript("OnEvent", function()
         SQH:HandleQuestGreeting()
 
     elseif event == "QUEST_DETAIL" then
+        -- QUAND ON CLIQUE SUR UN OBJET DE QUÊTE DANS L'INVENTAIRE
         SQH:HandleQuestDetail()
 
     elseif event == "QUEST_PROGRESS" then
         SQH:HandleQuestProgress()
 
     elseif event == "QUEST_COMPLETE" then
+        -- GESTION AMÉLIORÉE AVEC VÉRIFICATION DES SACS ET COOLDOWN
         SQH:HandleQuestComplete()
-
     end
 end)
 
 -------------------------------------------------
 -- Timer pour scans périodiques + throttling
+-- SANS DÉTECTION AUTOMATIQUE D'OBJETS
 -------------------------------------------------
 
 local throttleTimer = CreateFrame("Frame")
@@ -1027,7 +1193,7 @@ local periodicTimer = 0
 local throttleCheck = 0
 
 throttleTimer:SetScript("OnUpdate", function()
-    if not SQH.initialized or not SQH.enabled then
+    if not SQH.initialized then
         return
     end
 

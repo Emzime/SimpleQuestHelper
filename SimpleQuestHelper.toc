@@ -5,6 +5,9 @@
 ## Version: 1.2
 ## SavedVariables: SQH_Config
 ## IconTexture: Interface\AddOns\SimpleQuestHelper\icon.tga
+## OptionalDeps: pfUI
+## X-Category: Quest
+## X-Website: https://github.com/Emzime/SimpleQuestHelper
 
 SimpleQuestHelper.lua
 Locales\enUS.lua
@@ -14,3 +17,4 @@ Locales\esES.lua
 Locales\itIT.lua
 Locales\ptBR.lua
 Locales\ruRU.lua
+icon.tga
