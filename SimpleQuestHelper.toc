@@ -1,0 +1,16 @@
+## Interface: 11200
+## Title: |cffBFAEFCSimple Quest |cffFFB09EHelper
+## Notes: Announces quest objectives, completion, and auto-accepts/auto-completes quests
+## Author: Emzime
+## Version: 1.2
+## SavedVariables: SQH_Config
+## IconTexture: Interface\AddOns\SimpleQuestHelper\icon.tga
+
+SimpleQuestHelper.lua
+Locales\enUS.lua
+Locales\frFR.lua
+Locales\deDE.lua
+Locales\esES.lua
+Locales\itIT.lua
+Locales\ptBR.lua
+Locales\ruRU.lua

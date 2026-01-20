@@ -1,42 +1,59 @@
 -- ===================================================
--- SimpleQuestAnnouncer - Locales/itIT.lua
--- Localisation italiana
+-- SimpleQuestHelper - Locales/itIT.lua
+-- Localizzazione italiana
 -- Compatible WoW 1.12 (LUA 5.0)
 -- ===================================================
 
-if not SimpleQuestAnnouncer then SimpleQuestAnnouncer = {} end
-if not SimpleQuestAnnouncer.Locales then SimpleQuestAnnouncer.Locales = {} end
+if not SimpleQuestHelper then SimpleQuestHelper = {} end
+if not SimpleQuestHelper.Locales then SimpleQuestHelper.Locales = {} end
 
-SimpleQuestAnnouncer.Locales["itIT"] = {
-    PREFIX = "|cFF00CCFF[SQA]|r",
+SimpleQuestHelper.Locales["itIT"] = {
+    PREFIX = "|cFF00CCFF[SQH]|r",
     COMPLETED = "Missione completata!",
-    ENABLED = "Abilitato",
-    DISABLED = "Disabilitato",
-    HELP = "Uso: /sqa on|off",
-    TOOLTIP_LEFT = "Clic sinistro: Attiva/Disattiva",
-    TOOLTIP_RIGHT = "Clic destro: Menu lingua",
+    ENABLED = "Attivato",
+    DISABLED = "Disattivato",
+    AUTO_ACCEPT_ON = "Auto-accettazione attivata",
+    AUTO_ACCEPT_OFF = "Auto-accettazione disattivata",
+    AUTO_COMPLETE_ON = "Auto-completamento attivato",
+    AUTO_COMPLETE_OFF = "Auto-completamento disattivato",
+    HELP = "Uso: /sqh on|off",
+    TOOLTIP_TITLE = "Simple Quest Helper",
+    TOOLTIP_LEFT_CLICK = "Click sinistro: Attiva/disattiva annunci",
+    TOOLTIP_LEFT_SHIFT = "Shift+Click sinistro: Cambia lingua",
+    TOOLTIP_LEFT_ALT = "Alt+Click sinistro: Scansiona missioni",
+    TOOLTIP_RIGHT_CLICK = "Click destro: Attiva/disattiva auto-accettazione",
+    TOOLTIP_RIGHT_SHIFT = "Shift+Click destro: Attiva/disattiva auto-completamento",
+    TOOLTIP_RIGHT_ALT = "Alt+Click destro: Pulisci cache",
+    TOOLTIP_STATUS_ANNOUNCE = "Annunci",
+    TOOLTIP_STATUS_AUTOACCEPT = "Auto-accettazione",
+    TOOLTIP_STATUS_AUTOCOMPLETE = "Auto-completamento",
+    TOOLTIP_ON = "ON",
+    TOOLTIP_OFF = "OFF",
+    TOOLTIP_ACTIVATE = "Attiva",
+    TOOLTIP_DEACTIVATE = "Disattiva",
+    TOOLTIP_CHANGE_LANG = "Cambia lingua",
+    TOOLTIP_SCAN_QUESTS = "Scansiona missioni",
+    TOOLTIP_CLEAR_CACHE = "Pulisci cache",
     TOOLTIP_STATUS = "Stato",
-    LANG_SET = "Lingua impostata a",
-    BUTTON_EXISTS = "Il pulsante esiste già",
+    LANG_SET = "Lingua impostata su",
+    BUTTON_EXISTS = "Pulsante già esistente",
     BUTTON_CREATED = "Pulsante creato",
-    SCAN_START = "Scansione registro missioni...",
+    SCAN_START = "Scansionando registro missioni...",
     SCAN_END = "Scansione completata",
     LANG_LIST = "Lingue disponibili:",
-    LANG_USAGE = "Uso: /sqa lang [numero]",
-    CMD_HELP = "|cFF00CCFF=== Comandi Simple Quest Announcer ===|r",
-    CMD_ON = "|cFF00FF00/sqa on|r - Abilita annunci",
-    CMD_OFF = "|cFFFF0000/sqa off|r - Disabilita annunci",
-    CMD_LANG = "|cFFFFFF00/sqa lang|r - Cambia lingua",
-    CMD_BUTTON = "|cFF00FFFF/sqa button|r - Ricrea pulsante",
-    CMD_SCAN = "|cFFFF9900/sqa scan|r - Scansiona missioni",
-    CMD_HELP_TEXT = "|cFFCC00CC/sqa help|r - Mostra questo aiuto",
-    UNKNOWN_CMD = "Comando sconosciuto. Digita |cFF00CCFF/sqa help|r",
-    LOADED = "|cFF00CCFFSimple Quest Announcer v1.0|r caricato",
-    TYPE_HELP = "Digita |cFF00CCFF/sqa help|r per i comandi",
-    CACHE_CLEARED = "Cache missioni cancellato",
-    CACHE_CLEANED = "Cache pulito",
-    SILENT_MODE = "Modalità silenziosa per",
-    ANNOUNCEMENTS_ENABLED = "Annunci attivati",
-    NOT_INITIALIZED = "Non ancora inizializzato",
-    SECONDS = "secondi"
+    LANG_USAGE = "Uso: /sqh lang [numero]",
+    CMD_HELP = "|cFF00CCFF=== Comandi Simple Quest Helper ===|r",
+    CMD_ON = "|cFF00FF00/sqh on|r - Attiva annunci",
+    CMD_OFF = "|cFFFF0000/sqh off|r - Disattiva annunci",
+    CMD_LANG = "|cFFFFFF00/sqh lang|r - Cambia lingua",
+    CMD_BUTTON = "|cFF00FFFF/sqh button|r - Ricrea pulsante",
+    CMD_SCAN = "|cFFFF9900/sqh scan|r - Scansiona missioni",
+    CMD_AUTO_ACCEPT = "|cFF00FF00/sqh autoaccept|r - Attiva/disattiva auto-accettazione",
+    CMD_AUTO_COMPLETE = "|cFF00FF00/sqh autocomplete|r - Attiva/disattiva auto-completamento",
+    CMD_HELP_TEXT = "|cFFCC00CC/sqh help|r - Mostra questo aiuto",
+    UNKNOWN_CMD = "Comando sconosciuto. Digita |cFF00CCFF/sqh help|r",
+    LOADED = "|cFF00CCFFSimple Quest Helper v1.2|r caricato",
+    TYPE_HELP = "Digita |cFF00CCFF/sqh help|r per i comandi",
+    CACHE_CLEARED = "Cache missioni pulito",
+    CACHE_CLEANED = "Cache pulito"
 }
